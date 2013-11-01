@@ -1,1 +1,7 @@
 name = Project Source: GitHub
+description = Creates Drupal project XML based on GitHub projects.
+core = 7.x
+package = Development
+configure = admin/config/development/github-src
+dependencies[] = project_src
+dependencies[] = github_api
