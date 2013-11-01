@@ -1,3 +1,5 @@
+<?php
+
 /**
  * @file
  * Project Source: GitHub callback handler for tarball repackaging.
