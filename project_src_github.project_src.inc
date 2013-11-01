@@ -62,6 +62,19 @@ function project_src_github_project_src_info() {
       }
       foreach ($branches as $branch) {
         if (preg_match_all("/^(\\d+).x-(\\d+).x$/is", $branch['name'], $versions)) {
+          // Attempt to load and populate the commit date.
+          try {
+            $commit = $github_client->api('repo')->commits()->show($org, $project['short_name'], $branch['commit']['sha']);
+            $branch['commit']['committed_date'] = $commit['commit']['author']['date'];
+          }
+          catch (Exception $e) {
+            watchdog('project src github', 'An error occurred when attempting to load commit details for the @branch branch of %project from GitHub. Message returned:<br /><br />@msg', array(
+              '@branch' => $branch['name'],
+              '%project' => $project['short_name'],
+              '@msg' => $e->getMessage(),
+            ), WATCHDOG_ERROR);
+          }
+
           $api_version = check_plain($versions[1][0] . '.x');
           $project['api_version'] = $api_version;
           $project['api']['branches'][$api_version][$branch['name']] = $branch;
@@ -142,9 +155,21 @@ function project_src_github_project_src_releases($short_name, $api_version, $inf
       $releases = array();
       // Loop through all release tags from GitLab and create releases.
       foreach ($tags as $tag) {
-
         // Match on tags of the proper form.
         if (preg_match_all("/^(\\d+).x-(\\d+).\\d+/is", $tag['name'], $version)) {
+          // Attempt to load and populate the commit date.
+          try {
+            $commit = $github_client->api('repo')->commits()->show($org, $short_name, $tag['commit']['sha']);
+            $tag['commit']['committed_date'] = $commit['commit']['author']['date'];
+          }
+          catch (Exception $e) {
+            watchdog('project src github', 'An error occurred when attempting to load commit details for the @tag tag of %project from GitHub. Message returned:<br /><br />@msg', array(
+              '@tag' => $tag['name'],
+              '%project' => $project['short_name'],
+              '@msg' => $e->getMessage(),
+            ), WATCHDOG_ERROR);
+          }
+
           $api = $version[1][0] . '.x';
           // Only return releases for the current API version.
           if ($api == $api_version) {
