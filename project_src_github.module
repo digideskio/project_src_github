@@ -62,8 +62,18 @@ function project_src_github_permission() {
  * Clears Project Source: GitHub caches on commit to a tracked repository.
  */
 function project_src_github_github_webhook_event($payload, &$response, $args) {
-  // @todo Filter down to a subset before clearing the cache.
-  project_src_github_clear_cache();
+  // Ensure that the payload corresponds to a project we manage.
+  if (isset($payload['repository']['name'])) {
+    foreach (project_src_get_projects(NULL, 'project_src_github') as $project) {
+      if (isset($project[$payload['repository']['name']])) {
+        project_src_github_clear_cache();
+        watchdog('project src gitlab', 'Project Source: GitHub cache cleared by commit to @repo.', array(
+          '@repo' => $payload['repository']['name'],
+        ), WATCHDOG_NOTICE);
+        break;
+      }
+    }
+  }
 }
 
 
