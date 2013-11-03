@@ -52,61 +52,6 @@ function _project_src_github_format_release_info($commitref, $info) {
 
 
 /**
- * Takes the contents of a GitHub packaged tarball as a string and repackages it
- * in a form more familiar to drush and other Drupal package management tools.
- *
- * @param string $tarball
- *   The contents of a GitHub packaged tarball as a string.
- * @param string $url
- *   The source URL of the tarball.
- * @param string $pname
- *   The name of the project in question.
- * @param string $pv
- *   The version of the project in question.
- *
- * @return string
- *   The contents of a tarball suitable for use with Drush, etc.
- *
- * @todo We should really be storing/managing tarballs after repackaging.
- */
-function _project_src_github_repackage_tarball($tarball, $url, $pname, $pv) {
-  $file = '';
-
-  // Save the tarball to the temp directory.
-  $tar_name = md5($url . microtime()) . '.tar.gz';
-  $tar_file = file_unmanaged_save_data($tarball, 'temporary://' . $tar_name);
-
-  // Get an archiver and extract the GitHub tarball into its own directory.
-  $tar_extracted = 'temporary://' . $tar_name . '.extract';
-  $tar = archiver_get_archiver($tar_file);
-  $tar->extract($tar_extracted);
-
-  $source = $tar_extracted . '/' . $pname . '-' . $pv;
-  $destination = 'temporary://' . $pname;
-
-  // Drush expects a folder without version appended to it.
-  if (rename($source, $destination)) {
-    // Create a new tar extract and add the relevant package contents; in doing
-    // so, ensure that the contents exist in the new package at the root.
-    $final_extract = 'temporary://' . $tar_name . '.final';
-    $new_tar = new Archive_Tar($final_extract);
-    $new_tar->addModify(drupal_realpath($destination), '', drupal_realpath('temporary://'));
-    $file = file_get_contents($final_extract);
-
-    // Clean up our new archive.
-    file_unmanaged_delete_recursive($destination);
-    file_unmanaged_delete($final_extract);
-  }
-
-  // Clean up all remaining temporary files.
-  file_unmanaged_delete($tar_file);
-  file_unmanaged_delete_recursive($tar_extracted);
-
-  return $file;
-}
-
-
-/**
  * Returns the contents of a file as a string given a file URL.
  *
  * @param string $file
