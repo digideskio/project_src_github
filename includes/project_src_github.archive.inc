@@ -31,7 +31,7 @@ function project_src_github_get_archive($namespace, $project_name, $version) {
   if ($file = _project_src_github_file_as_string($get)) {
     // The following can potentially be time-consuming and there may be issues
     // if multiple requests attempt to be fulfilled for the same project.
-    $lock_name = __FUNCTION__ . '-' . $project_name;
+    $lock_name = __FUNCTION__ . '-' . $project_name . '-' . $version;
     if (lock_acquire($lock_name)) {
       // If we've acquired the lock, process as usual.
       $file = _project_src_github_repackage_tarball($file, $get, $project_name, $version);
@@ -92,10 +92,11 @@ function _project_src_github_repackage_tarball($tarball, $url, $pname, $pv) {
   $tar->extract($tar_extracted);
 
   $source = $tar_extracted . '/' . $pname . '-' . $pv;
-  $destination = 'temporary://' . $pname;
+  $destination_dir = 'temporary://' . md5($pname . '-' . $pv . microtime());
+  $destination = $destination_dir . '/' . $pname;
 
   // Drush expects a folder without version appended to it.
-  if (rename($source, $destination)) {
+  if (mkdir($destination_dir) && rename($source, $destination)) {
     // Append package details to the info file.
     $info_file = $destination . '/' . $pname . '.info';
     if (file_exists($info_file)) {
@@ -107,11 +108,11 @@ function _project_src_github_repackage_tarball($tarball, $url, $pname, $pv) {
     // so, ensure that the contents exist in the new package at the root.
     $final_extract = 'temporary://' . $tar_name . '.final';
     $new_tar = new Archive_Tar($final_extract);
-    $new_tar->addModify(drupal_realpath($destination), '', drupal_realpath('temporary://'));
+    $new_tar->addModify(drupal_realpath($destination), '', drupal_realpath($destination_dir));
     $file = file_get_contents($final_extract);
 
     // Clean up our new archive.
-    file_unmanaged_delete_recursive($destination);
+    file_unmanaged_delete_recursive($destination_dir);
     file_unmanaged_delete($final_extract);
   }
 
