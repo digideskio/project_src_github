@@ -115,6 +115,7 @@ function _project_src_github_repackage_tarball($namespace, $project, $version, $
 
   // Get an archiver and extract the GitHub tarball into its own directory.
   $tar_extracted = 'temporary://' . $tar_name . '.extract';
+  file_prepare_directory($tar_extracted, FILE_CREATE_DIRECTORY);
   $tar = archiver_get_archiver($tar_file);
   $tar->extract($tar_extracted);
 
