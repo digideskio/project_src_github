@@ -174,6 +174,7 @@ function _project_src_github_repackage_tarball($namespace, $project, $version, $
 function _project_src_github_get_info($project_name, $version) {
   // Prepare the defaults.
   $info = array(
+    'newline' => "\n",
     'comment' => '; Project Source: GitHub packaging details.',
     'project status url' => 'project status url = ' . url('drupal/release-history', array('absolute' => TRUE)),
     'project' => 'project = ' . $project_name,
