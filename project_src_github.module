@@ -30,7 +30,7 @@ function project_src_github_menu() {
   // Callback to download archive packages in the correct format.
   $public_stream_wrapper = new DrupalPublicStreamWrapper();
   $public_files = $public_stream_wrapper->getDirectoryPath();
-  $base = count(split('/', $public_files));
+  $base = count(explode('/', $public_files));
   $items[$public_files . '/project-src-github/%/%/%/download.tar.gz'] = array(
     'title' => 'File download callback for a specific project release',
     'delivery callback' => 'project_src_deliver_clean_page',
