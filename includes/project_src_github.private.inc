@@ -40,12 +40,10 @@ function _project_src_github_format_release_info($commitref, $info) {
   $release['release_link'] = check_url($root);
 
   // Details related to the download file.
-  if ($file_contents = _project_src_github_file_as_string($commitref['tarball_url'])) {
-    $release['download_link'] = $commitref['tarball_url'];
-    $release['mdhash'] = md5($file_contents);
-    $release['filesize'] = strlen($file_contents);
-    $release['archive_type'] = 'tar.gz';
-  }
+  $release['archive_type'] = 'tar.gz';
+  $release['download_link'] = $commitref['tarball_url'];
+  $release['mdhash'] = $commitref['mdhash'];
+  $release['filesize'] = $commitref['filesize'];
 
   return $release;
 }
@@ -72,4 +70,29 @@ function _project_src_github_file_as_string($file) {
   curl_close($ch);
 
   return $contents;
+}
+
+
+/**
+ * Given a file URI, it loads the Drupal file object from the database.
+ *
+ * @param string $uri
+ *   The file URI of the file (e.g. public://my-file.jpg).
+ *
+ * @return stdClass
+ *   The Drupal file object associated with the URI, or FALSE if none exists.
+ */
+function _project_src_github_load_file_by_uri($uri) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'file')
+    ->propertyCondition('uri', $uri)
+    ->range(0, 1);
+  $result = $query->execute();
+
+  if (isset($result['file'])) {
+    return file_load(key($result['file']));
+  }
+  else {
+    return FALSE;
+  }
 }

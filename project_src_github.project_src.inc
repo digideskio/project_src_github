@@ -106,6 +106,8 @@ function project_src_github_project_src_info() {
  * Implements hook_project_src_releases().
  */
 function project_src_github_project_src_releases($short_name, $api_version, $info) {
+  $public_stream_wrapper = new DrupalPublicStreamWrapper();
+
   // Load all of our declared projects for this API version.
   $projects = project_src_get_projects($api_version, 'project_src_github');
 
@@ -117,11 +119,20 @@ function project_src_github_project_src_releases($short_name, $api_version, $inf
     foreach ($info['api']['branches'][$api_version] as $branch) {
       $original = $branch['name'];
       $branch['name'] = $original . '-dev';
-      $tarball_root = 'drupal/github-release-files/';
+      $public_files = $public_stream_wrapper->getDirectoryPath();
+      $tarball_root = $public_files . '/project-src-github/';
       $tarball_path = $info['api']['path_with_namespace'] . '/' . $original;
       $branch['tarball_url'] = url($tarball_root . $tarball_path . '/download.tar.gz', array(
         'absolute' => TRUE,
       ));
+
+      // Note, we're not checking locally because dev releases should never be
+      // saved to the local filesystem.
+      if ($file_contents = _project_src_github_file_as_string($branch['tarball_url'])) {
+        $branch['mdhash'] = md5($file_contents);
+        $branch['filesize'] = strlen($file_contents);
+      }
+
       $dev_releases[$original] = _project_src_github_format_release_info($branch, $info);
       $dev_releases[$original]['download_link'] = str_replace($branch['name'], $original, $dev_releases[$original]['download_link']);
     }
@@ -174,11 +185,27 @@ function project_src_github_project_src_releases($short_name, $api_version, $inf
           // Only return releases for the current API version.
           if ($api == $api_version) {
             // Custom URL for download.
-            $tarball_root = 'drupal/github-release-files/';
+            $public_files = $public_stream_wrapper->getDirectoryPath();
+            $tarball_root = $public_files . '/project-src-github/';
             $tarball_path = $info['api']['path_with_namespace'] . '/' . $tag['name'];
             $tag['tarball_url'] = url($tarball_root . $tarball_path . '/download.tar.gz', array(
               'absolute' => TRUE,
             ));
+
+            // Attempt to load a file size and an md5 hash from the local file.
+            $uri = 'public://project-src-github/' . $tarball_path . '/download.tar.gz';
+            if (file_exists($uri) && $file_contents = file_get_contents($uri)) {
+              // @todo As a managed file, we should be loading the file object
+              //   and getting properties, not loading the file into memory.
+              $tag['mdhash'] = md5($file_contents);
+              $tag['filesize'] = strlen($file_contents);
+            }
+            else {
+              if ($file_contents = _project_src_github_file_as_string($tag['tarball_url'])) {
+                $tag['mdhash'] = md5($file_contents);
+                $tag['filesize'] = strlen($file_contents);
+              }
+            }
 
             // Add the release to the master releases array.
             $releases[$tag['name']] = _project_src_github_format_release_info($tag, $info);
