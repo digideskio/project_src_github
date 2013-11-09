@@ -5,3 +5,5 @@ package = Development
 configure = admin/config/development/github-src
 dependencies[] = project_src
 dependencies[] = github_api
+
+files[] = project_src_github.test
