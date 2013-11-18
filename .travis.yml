@@ -29,7 +29,7 @@ before_script:
 
   # start a web server on port 8080, download requirements
   - sudo apt-get update > /dev/null
-  - sudo apt-get install -y --force-yes php5-cgi php5-mysql
+  - sudo apt-get install -y --force-yes php5-cgi php5-mysql php5-curl
   - drush runserver 127.0.0.1:8080 &
   - sleep 4
   - drush vset --yes simpletest_verbose FALSE 
