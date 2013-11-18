@@ -4,3 +4,265 @@
  * @file
  * SimpleTest tests for the Project Source: GitHub module.
  */
+
+
+/**
+ * Helper class with some added functions and properties for testing.
+ */
+class ProjectSrcGithubBaseCase extends DrupalWebTestCase {
+
+  /**
+   * The GitHub organization used for testing.
+   */
+  protected $org = 'drewpaul_inc';
+
+  /**
+   * @var GithubApiMock
+   */
+  protected $github;
+
+  function setUp(array $modules = array()) {
+    $modules[] = 'project_src';
+    $modules[] = 'project_src_github';
+    parent::setUp($modules);
+
+    // Order matters!
+    $fake_api = 'project_src_github_test_github_api';
+    $this->fakeModuleUninstall('composer_manager');
+    $this->fakeModuleUninstall('github_api');
+    drupal_flush_all_caches();
+    $this->fakeModuleInstall($fake_api);
+
+    // Set the organization variable.
+    variable_set('project_src_github_org', $this->org);
+
+    // Keep track of our fake GitHub API object for test comparisons.
+    module_load_include('module', $fake_api, $fake_api);
+    $this->github = new GithubApiMock();
+  }
+
+  /**
+   * Compares the provided project XML values with those provided by our mock
+   * GitHub API object.
+   *
+   * @param SimpleXMLElement|array $xml
+   *   The SimpleXMLElement as returned by the xpath query (or an array that
+   *   contains at a SimpleXMLElement as its first item).
+   * @param string $api
+   *   The API version of the requested project XML.
+   */
+  protected function validateProjectXml($xml, $api) {
+    $repos = $this->github->repositories($this->org);
+    $repo = $repos[$this->org . '_module'];
+
+    // We may be handed an array.
+    if (is_array($xml)) {
+      $xml = $xml[0];
+    }
+
+    $major_version = substr($repo['default_branch'], 4, 1);
+
+    $this->assertEqual($xml->title, $repo['name'], format_string('Returned the expected project title %arg.', array('%arg' => $xml->title)));
+    $this->assertEqual($xml->short_name, $repo['name'], format_string('Returned the expected project short name %arg.', array('%arg' => $xml->short_name)));
+    $this->assertEqual($xml->creator, $repo['owner']['login'], format_string('Returned the expected project creator %arg.', array('%arg' => $xml->creator)));
+    $this->assertEqual($xml->api_version, $api, format_string('Returned the expected API version %arg.', array('%arg' => $xml->api_version)));
+    $this->assertEqual($xml->default_major, $major_version, format_string('Returned the expected default major version %arg.', array('%arg' => $xml->default_major)));
+    $this->assertEqual($xml->project_status, 'published', 'Returned the expected status.');
+    // @todo Recommended/supported major?
+    // @todo Link?
+  }
+
+  /**
+   * Compares the provided release XML values with those provided by our mock
+   * GitHub API object.
+   *
+   * @param SimpleXMLElement $xml
+   *   The SimpleXMLElement as returned by the xpath query.
+   */
+  protected function validateReleaseXml($xml) {
+    $repos = $this->github->repositories($this->org);
+    $repo = $repos[$this->org . '_module'];
+    $branches = $this->github->branches($this->org, $this->org . '_module');
+    $commit = $this->github->show($this->org, $this->org . '_module', '');
+
+    // Tests if we're dealing with a dev release.
+    if (substr($xml->version, -4) == '-dev') {
+      $expected_extra = 'dev';
+      $real_tag = substr($xml->version, 0, -4);
+    }
+    // Test if we're dealing with an unstable release.
+    elseif (preg_match_all('/.*?((unstable|alpha|beta|rc)\\d+)/is', $xml->version, $matches)) {
+      $expected_extra = $matches[1][0];
+      $real_tag = $xml->version;
+    }
+    else {
+      $expected_extra = NULL;
+      $real_tag = $xml->version;
+    }
+
+    $name = $this->org . '_module ' . $xml->version;
+    $major_version = substr($real_tag, 4, 1);
+    $release_link = 'https://github.com/' . $repo['full_name'];
+    $file_name = 'project-src-github/' . $repo['full_name'] . '/' . $real_tag . '/' . 'download';
+
+    $this->assertEqual($xml->name, $name, format_string('Returned the expected release name %arg.', array('%arg' => $xml->name)));
+    $this->assertEqual($xml->version, $xml->tag, format_string('Returned the expected release tag %arg.', array('%arg' => $xml->tag)));
+    $this->assertEqual($xml->version_major, $major_version, format_string('Returned the expected major version %arg.', array('%arg' => $xml->version_major)));
+    $this->assertTrue(strpos($xml->download_link, $file_name) !== FALSE, format_string('Returned the expected release download link %arg.', array('%arg' => $xml->download_link)));
+    $this->assertEqual($xml->date, strtotime($commit['commit']['author']['date']), format_string('Returned the expected release date %arg.', array('%arg' => $xml->date)));
+    $this->assertEqual($xml->release_link, $release_link, format_string('Returned the expected release link %arg.', array('%arg' => $xml->release_link)));
+    $this->assertEqual($xml->status, 'published', 'Returned valid status.');
+
+    // If this release corresponds to a dev/alpha/beta/etc. release, test it.
+    if (!empty($expected_extra)) {
+      $this->assertEqual($xml->version_extra, $expected_extra, format_string('Returned expected extra version metadata %arg.', array('%arg' => $xml->version_extra)));
+
+      // Ensure that dev tags correspond to actual branches from the API.
+      if ($expected_extra == 'dev') {
+        $this->assertTrue(isset($branches[$real_tag]), format_string('Release %arg matches a valid branch.', array('%arg' => $real_tag)));
+      }
+    }
+  }
+
+  /**
+   * Compares the provided file XML values with those provided by our mock
+   * GitHub API object.
+   *
+   * @param SimpleXMLElement $xml
+   *   The SimpleXMLElement as returned by the xpath query.
+   */
+  protected function validateFileXml($xml) {
+    $repos = $this->github->repositories($this->org);
+    $repo = $repos[$this->org . '_module'];
+    $commit = $this->github->show($this->org, $this->org . '_module', '');
+
+    $version = '';
+    if (preg_match_all('/.*?(\\d+\\.x-\\d+\\..(-.*\\d+)?).*?/is', $xml->url, $matches)) {
+      $version = $matches[1][0];
+      $this->verbose('<pre>' . print_r($matches, TRUE) . '</pre>');
+    }
+    elseif (preg_match_all('', $xml->url, $matches)) {
+
+    }
+    $file_name = 'project-src-github/' . $repo['full_name'] . '/' . $version . '/' . 'download';
+
+    // Note File size and md5 are validated separately.
+    $this->assertTrue(strpos($xml->url, $file_name) !== FALSE, format_string('Returned the expected release download link %arg.', array('%arg' => $xml->url)));
+    $this->assertEqual($xml->archive_type, 'tar.gz', 'Returned the expected archive type.');
+    $this->assertEqual($xml->filedate, strtotime($commit['commit']['author']['date']), format_string('Returned the expected file date.', array('%arg' => $xml->filedate)));
+  }
+
+  /**
+   * Performs an unofficial module install (in that no hooks are run and no
+   * dependencies are loaded or installed).
+   *
+   * @param string $module
+   *   The module to "install."
+   */
+  protected function fakeModuleInstall($module) {
+    db_update('system')
+      ->fields(array('status' => 1))
+      ->condition('type', 'module')
+      ->condition('name', $module)
+      ->execute();
+
+    system_list_reset();
+    module_list(TRUE);
+    module_implements('', FALSE, TRUE);
+    _system_update_bootstrap_status();
+    registry_update();
+    drupal_get_schema(NULL, TRUE);
+    drupal_theme_rebuild();
+    entity_info_cache_clear();
+  }
+
+  /**
+   * Performs an unofficial module uninstall (in that no hooks are run and no
+   * dependencies are loaded or installed).
+   *
+   * @param string $module
+   *   The module to "uninstall."
+   */
+  protected function fakeModuleUninstall($module) {
+    db_update('system')
+      ->fields(array('status' => 0))
+      ->condition('type', 'module')
+      ->condition('name', $module)
+      ->execute();
+
+    system_list_reset();
+    module_list(TRUE);
+    module_implements('', FALSE, TRUE);
+    entity_info_cache_clear();
+    registry_update();
+    _system_update_bootstrap_status();
+    drupal_theme_rebuild();
+  }
+}
+
+
+/**
+ * End-to-end tests for Project Source: GitHub.
+ */
+class ProjectSrcGithubEndToEndTests extends ProjectSrcGithubBaseCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Project Source GitHub API implementation',
+      'description' => 'Tests the Project Source API implementation.',
+      'group' => 'Project Source GitHub',
+    );
+  }
+
+  public function testProjectSourceProjectXml() {
+    // Check for valid XML at 6.x.
+    $this->drupalGet('drupal/release-history/' . $this->org . '_module/6.x');
+    $headers = $this->drupalGetHeaders();
+    $this->assertEqual($headers['content-type'], 'text/xml; charset=utf-8', 'Found valid XML for 6.x.');
+    $this->validateProjectXml($this->xpath('//project'), '6.x');
+    $this->assertNoFieldByXpath('//version', 'master', 'No release found for "master."');
+
+    // Check 6.x releases.
+    $releases = $this->xpath('//release');
+    $this->assertEqual(count($releases), 2, 'Found 2 release for 6.x.');
+    foreach ($releases as $release) {
+      $this->validateReleaseXml($release);
+    }
+
+    // Check 6.x files.
+    $files = $this->xpath('//file');
+    $this->assertEqual(count($files), 2, 'Found 2 file for 6.x');
+    foreach ($files as $file) {
+      $this->validateFileXml($file);
+    }
+
+    // Check for valid XML at 7.x.
+    $this->drupalGet('drupal/release-history/' . $this->org . '_module/7.x');
+    $headers = $this->drupalGetHeaders();
+    $this->assertEqual($headers['content-type'], 'text/xml; charset=utf-8', 'Found valid XML for 7.x.');
+    $this->validateProjectXml($this->xpath('//project'), '7.x');
+    $this->assertNoFieldByXpath('//version', 'master', 'No release found for "master."');
+
+    // Check 7.x releases.
+    $releases = $this->xpath('//release');
+    $this->assertEqual(count($releases), 5, 'Found 5 releases for 7.x');
+    foreach ($releases as $release) {
+      $this->validateReleaseXml($release);
+    }
+
+    // Check 7.x files.
+    $files = $this->xpath('//file');
+    $this->assertEqual(count($files), 5, 'Found 5 files for 7.x');
+    foreach ($files as $file) {
+      $this->validateFileXml($file);
+    }
+
+    // Check that there are no results for 8.x.
+    $this->drupalGet('drupal/release-history/' . $this->org . '_module/8.x');
+    $headers = $this->drupalGetHeaders();
+    $this->assertEqual($headers['content-type'], 'text/xml; charset=utf-8', 'Found valid XML for 8.x.');
+    $this->assertNoFieldByXpath('//release', NULL, 'No releases found for 8.x.');
+    $text = 'No release history was found for the requested project (' . $this->org . '_module).';
+    $this->assertFieldByXPath('//error', $text, 'Found "no release history" messaging for 8.x');
+  }
+}
