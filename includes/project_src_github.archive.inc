@@ -102,7 +102,7 @@ function project_src_github_get_archive($namespace, $project_name, $version) {
  * @todo We should really be storing/managing tarballs after repackaging.
  */
 function _project_src_github_repackage_tarball($namespace, $project, $version, $managed_destination) {
-  $github = 'https://github.com';
+  $github = variable_get('project_src_github_domain', 'https://github.com');
   $extension = $namespace . '/' . $project;
   $get = $github . '/' . $extension . '/archive/' . $version . '.tar.gz';
   $tarball = _project_src_github_file_as_string($get);
