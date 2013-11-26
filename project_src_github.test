@@ -37,6 +37,7 @@ class ProjectSrcGithubBaseCase extends DrupalWebTestCase {
 
     // Set the organization variable.
     variable_set('project_src_github_org', $this->org);
+    variable_set('project_src_github_domain', $GLOBALS['base_url']);
 
     // Keep track of our fake GitHub API object for test comparisons.
     module_load_include('module', $fake_api, $fake_api);
@@ -266,5 +267,50 @@ class ProjectSrcGithubEndToEndTests extends ProjectSrcGithubBaseCase {
     $this->assertNoFieldByXpath('//release', NULL, 'No releases found for 8.x.');
     $text = 'No release history was found for the requested project (' . $this->org . '_module).';
     $this->assertFieldByXPath('//error', $text, 'Found "no release history" messaging for 8.x');
+  }
+}
+
+/**
+ * Tests Project Source: GitHub file generation.
+ */
+class ProjectSrcGithubFileTests extends ProjectSrcGithubBaseCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Project Source GitHub - File',
+      'description' => 'Tests the Project Source GitHub file generation.',
+      'group' => 'Project Source GitHub',
+    );
+  }
+
+  public function testProjectSourceProjectFiles() {
+    $root = 'public://project-src-github/drewpaul_inc/drewpaul_inc_module';
+
+    // Test tags.
+    foreach ($this->github->tags($this->org, $this->org . '_module') as $tag => $info) {
+      $file = $root . '/' . $tag . '/download.tar.gz';
+
+      // Check that the file does not exist locally.
+      $this->assertFalse(file_exists($file), format_string('No local file for !tag yet.', array(
+        '!tag' => $tag,
+      )));
+
+      // Then get the file and check the response, content type, and hash.
+      $this->drupalGet(file_create_url($file));
+      $headers = $this->drupalGetHeaders();
+      print_r(file_create_url($file));
+      $this->assertEqual($headers['content-type'], 'application/x-gzip', format_string('Found a valid tar archive for !tag.', array(
+        '!tag' => $tag,
+      )));
+
+      // Then check that the file does exist locally.
+      $this->assertTrue(file_exists($file), format_string('File successfully saved for !tag.', array(
+        '!tag' => $tag,
+      )));
+
+      // Check that the file exists in the managed file table.
+    }
+
+    // Test branches.
   }
 }
