@@ -215,6 +215,8 @@ class ProjectSrcGithubEndToEndTests extends ProjectSrcGithubBaseCase {
   }
 
   public function testProjectSourceProjectXml() {
+    print_r($this->public_files_directory);
+    print_r(variable_get('file_public_path', 'undefined'));
     // Check for valid XML at 6.x.
     $this->drupalGet('drupal/release-history/' . $this->org . '_module/6.x');
     $headers = $this->drupalGetHeaders();
